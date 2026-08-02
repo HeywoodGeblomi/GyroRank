@@ -1,0 +1,26 @@
+# Build
+*.o
+*.obj
+*.exe
+*.out
+demo
+bench
+build/
+CMakeCache.txt
+CMakeFiles/
+*.a
+*.so
+*.dylib
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*~
+
+# Optional local pdqsort
+# pdqsort.h   (uncomment if you want to ignore a local copy)
+
+# OS
+.DS_Store
+Thumbs.db
