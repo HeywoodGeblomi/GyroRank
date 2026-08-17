@@ -1,0 +1,22 @@
+# Git / IDE
+.git
+.github
+.vscode
+.idea
+*.swp
+*~
+
+# Build artifacts
+build/
+*.o
+*.a
+*.so
+demo
+gyro_rank_demo
+
+# Optional local header (we fetch inside container)
+pdqsort.h
+
+# Docs that are not needed for the binary
+*.md
+LICENSE

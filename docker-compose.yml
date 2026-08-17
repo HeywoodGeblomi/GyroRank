@@ -1,0 +1,6 @@
+services:
+  gyorank:
+    build: .
+    image: gyorank:0.1.0
+    container_name: gyorank-demo
+    restart: "no"
