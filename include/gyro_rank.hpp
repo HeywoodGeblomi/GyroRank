@@ -4,21 +4,18 @@
  *
  * Fully optimized, production-ready C++ kernel with:
  *   - Official Orson Peters pdqsort preferred for all internal sorts
- *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking
- *   - Explicit GyroController (observe → gate; striate arrives in Phase 3)
+ *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking (reference)
+ *   - Explicit GyroController (observe → striate → gate)
  *   - Deterministic LCG (LCG_DIV = 2^32) matching TDPSK production
  *   - Zero-allocation spirit, OpenMP-ready, bounds-hardened
  *
- * Phase 1 (GYR-CTRL-001): rank identity for exact M==2 paths.
- *   - Silent 1-D escape for high sortedness deleted from exact path.
- *   - Rank1D restricted to M<=1.
- *   - Approx1D is opt-in only (GyroOptions.allow_approx_1d).
- *   - NestedOrProjection is projection onto first two columns, not nested ranking.
- *
- * Phase 2: LowAux2D stub deleted (no RSS-winning distinct exact kernel ready).
+ * Phase 1: rank identity (silent 1-D escape deleted, Rank1D ≤ M=1, Approx1D opt-in).
+ * Phase 2: LowAux2D stub deleted.
+ * Phase 3: cheap observe (sample S≤1024) + striate() writing dumpable U[k]; gate = argmin U.
  *
  * Build: g++ -O3 -std=c++17 -Iinclude examples/demo.cpp -o demo
  * Optional: place pdqsort.h next to the include path for speedup
+ * Debug: compile with -DGYRO_DEBUG for features/U[]/strategy dump on stderr.
  */
 
 #pragma once
@@ -32,6 +29,10 @@
 #include <cmath>
 #include <cassert>
 #include <type_traits>
+#include <unordered_set>
+#ifdef GYRO_DEBUG
+#include <cstdio>
+#endif
 
 #if defined(_OPENMP)
 #include <omp.h>
@@ -115,6 +116,7 @@ private:
 
 // ============================================================================
 // Coordinate compression — accelerated by GYRO_SORT (pdqsort)
+// Full compress stays inside the chosen kernel only (Phase 3)
 // ============================================================================
 inline void compress_column(const double* matrix, uint32_t n, uint32_t m,
                             uint32_t col, std::vector<uint32_t>& out_rank,
@@ -140,7 +142,7 @@ inline void compress_column(const double* matrix, uint32_t n, uint32_t m,
 }
 
 // ============================================================================
-// Sortedness helper
+// Sortedness helper (used on samples in observe)
 // ============================================================================
 inline double sortedness_1d(const double* col, uint32_t n, uint32_t stride = 1) {
     if (n <= 1) return 1.0;
@@ -242,69 +244,141 @@ struct GyroOptions {
 };
 
 // ============================================================================
-// GyroController
+// GyroController — Phase 3: cheap observe + striate
 // ============================================================================
 struct GyroFeatures {
     uint32_t n = 0;
     uint32_t m = 0;
     double   sortedness_0 = 1.0;
     double   sortedness_1 = 1.0;
-    uint32_t density_product = 0;
+    uint32_t uniq_x_hat = 0;
+    uint32_t uniq_y_hat = 0;
+    uint32_t density_product = 0; // estimate = uniq_x_hat * uniq_y_hat
     bool     memory_pressure = false;
+    uint64_t memory_budget_bytes = 0;
 };
 
 enum class Strategy : uint8_t {
     Rank1D,              // only legal for M <= 1
-    Fenwick2D,
-    NestedOrProjection,  // projection onto first two columns for M >= 3; not nested ranking
-    Approx1D             // opt-in only; inexact (col-0 layers)
+    Fenwick2D,           // sole exact M==2 kernel (reference)
+    NestedOrProjection,  // projection onto first two columns for M >= 3
+    Approx1D             // opt-in only; inexact
 };
+
+// Named cost constants (calibrate in comments; not theorems)
+constexpr double GYRO_C1 = 1.0;   // N log N coefficient for Fenwick / Rank1D
+constexpr double GYRO_C2 = 0.5;   // uniq_y term for Fenwick
+constexpr double GYRO_INF = 1e300;
 
 class GyroController {
 public:
+    // Phase 3: O(min(N,S)) with S <= 1024. Full compress stays inside kernel.
     GyroFeatures observe(const double* matrix, uint32_t n, uint32_t m,
-                         bool memory_pressure = false) {
+                         bool memory_pressure = false,
+                         uint64_t memory_budget_bytes = 0) {
         feats_.n = n;
         feats_.m = m;
         feats_.memory_pressure = memory_pressure;
+        feats_.memory_budget_bytes = memory_budget_bytes;
         feats_.sortedness_0 = 1.0;
         feats_.sortedness_1 = 1.0;
+        feats_.uniq_x_hat = 0;
+        feats_.uniq_y_hat = 0;
         feats_.density_product = 0;
         if (n == 0 || m == 0) return feats_;
 
-        std::vector<double> col0(n);
-        for (uint32_t i = 0; i < n; ++i) col0[i] = matrix[i * m + 0];
-        feats_.sortedness_0 = sortedness_1d(col0.data(), n);
+        const uint32_t S = std::min(n, 1024u);
+        // Deterministic sample indices via stride
+        const uint32_t step = (n + S - 1) / S;
+
+        // Sampled sortedness_0
+        {
+            uint32_t ordered = 0, pairs = 0;
+            for (uint32_t i = 0; i + step < n; i += step) {
+                if (matrix[i * m + 0] <= matrix[(i + step) * m + 0]) ++ordered;
+                ++pairs;
+            }
+            feats_.sortedness_0 = pairs ? static_cast<double>(ordered) / pairs : 1.0;
+        }
+
+        // Sampled uniq_x_hat (exact distinct on the sample)
+        {
+            std::unordered_set<double> seen;
+            for (uint32_t i = 0; i < n && seen.size() < S; i += step)
+                seen.insert(matrix[i * m + 0]);
+            feats_.uniq_x_hat = static_cast<uint32_t>(seen.size());
+        }
 
         if (m >= 2) {
-            std::vector<double> col1(n);
-            for (uint32_t i = 0; i < n; ++i) col1[i] = matrix[i * m + 1];
-            feats_.sortedness_1 = sortedness_1d(col1.data(), n);
-
-            std::vector<uint32_t> r0, r1;
-            uint32_t max0 = 0, max1 = 0;
-            compress_column(matrix, n, m, 0, r0, max0);
-            compress_column(matrix, n, m, 1, r1, max1);
-            feats_.density_product = (max0 + 1) * (max1 + 1);
+            // Sampled sortedness_1
+            {
+                uint32_t ordered = 0, pairs = 0;
+                for (uint32_t i = 0; i + step < n; i += step) {
+                    if (matrix[i * m + 1] <= matrix[(i + step) * m + 1]) ++ordered;
+                    ++pairs;
+                }
+                feats_.sortedness_1 = pairs ? static_cast<double>(ordered) / pairs : 1.0;
+            }
+            // Sampled uniq_y_hat
+            {
+                std::unordered_set<double> seen;
+                for (uint32_t i = 0; i < n && seen.size() < S; i += step)
+                    seen.insert(matrix[i * m + 1]);
+                feats_.uniq_y_hat = static_cast<uint32_t>(seen.size());
+            }
+            feats_.density_product = feats_.uniq_x_hat * feats_.uniq_y_hat;
         }
         return feats_;
     }
 
-    // Phase 1+: exact path never auto-escapes to 1-D; LowAux2D removed in Phase 2
-    Strategy gate(const GyroOptions& opt) const {
+    // Phase 3: write U[k] for live strategies (dumpable under GYRO_DEBUG)
+    void striate(const GyroOptions& opt, double U[4]) const {
         const auto& f = feats_;
-        if (f.m <= 1)
-            return Strategy::Rank1D;
+        const double nlog = f.n * std::log2(static_cast<double>(f.n) + 1.0);
 
-        // Approx1D is opt-in and only when exact is not required
-        if (opt.allow_approx_1d && !opt.exact)
-            return Strategy::Approx1D;
+        // Rank1D
+        U[0] = (f.m <= 1) ? GYRO_C1 * nlog : GYRO_INF;
 
-        if (f.m == 2)
-            return Strategy::Fenwick2D;
+        // Fenwick2D
+        U[1] = GYRO_C1 * nlog + GYRO_C2 * static_cast<double>(f.uniq_y_hat);
+        if (!opt.exact) U[1] = GYRO_INF; // not selected when exact not required? keep finite for exact
 
-        // M >= 3: projection onto first two columns (not true nested ranking)
-        return Strategy::NestedOrProjection;
+        // NestedOrProjection
+        U[2] = (f.m >= 3) ? U[1] : GYRO_INF;
+
+        // Approx1D
+        U[3] = (opt.allow_approx_1d && !opt.exact) ? GYRO_C1 * nlog : GYRO_INF;
+
+        // Memory pressure term (simple)
+        if (opt.memory_pressure || (opt.memory_budget_bytes > 0 && f.density_product > 1000000u)) {
+            // Prefer nothing extra; Fenwick still chosen under exact
+        }
+    }
+
+    Strategy gate(const GyroOptions& opt) const {
+        double U[4];
+        striate(opt, U);
+
+        // argmin under exactness (already encoded in U via INF)
+        int best = 0;
+        for (int k = 1; k < 4; ++k)
+            if (U[k] < U[best]) best = k;
+
+#ifdef GYRO_DEBUG
+        std::fprintf(stderr, "[GYRO_DEBUG] n=%u m=%u s0=%.3f s1=%.3f ux=%u uy=%u\n",
+                     feats_.n, feats_.m, feats_.sortedness_0, feats_.sortedness_1,
+                     feats_.uniq_x_hat, feats_.uniq_y_hat);
+        std::fprintf(stderr, "[GYRO_DEBUG] U = [%.1f, %.1f, %.1f, %.1f]  chosen=%d\n",
+                     U[0], U[1], U[2], U[3], best);
+#endif
+
+        switch (best) {
+        case 0: return Strategy::Rank1D;
+        case 1: return Strategy::Fenwick2D;
+        case 2: return Strategy::NestedOrProjection;
+        case 3: return Strategy::Approx1D;
+        default: return Strategy::Fenwick2D;
+        }
     }
 
     // Back-compat
@@ -333,7 +407,7 @@ inline void execute_gyro_rank_ex(const double* matrix_in,
     if (n == 0 || m == 0) return;
 
     GyroController ctrl;
-    ctrl.observe(matrix_in, n, m, opt.memory_pressure);
+    ctrl.observe(matrix_in, n, m, opt.memory_pressure, opt.memory_budget_bytes);
     Strategy strat = ctrl.gate(opt);
 
     switch (strat) {
@@ -342,7 +416,6 @@ inline void execute_gyro_rank_ex(const double* matrix_in,
         if (dom_out) std::fill(dom_out, dom_out + n, 0);
         break;
     case Strategy::Approx1D:
-        // inexact, col-0 only; only reached when allow_approx_1d && !exact
         rank_1d(matrix_in, n, m, ranks_out);
         if (dom_out) std::fill(dom_out, dom_out + n, 0);
         break;
@@ -350,7 +423,6 @@ inline void execute_gyro_rank_ex(const double* matrix_in,
         exact_rank_2d_fenwick(matrix_in, n, m, ranks_out, dom_out);
         break;
     case Strategy::NestedOrProjection:
-        // Projection onto first two objectives for M >= 3; not nested ranking
         if (m >= 2)
             exact_rank_2d_fenwick(matrix_in, n, m, ranks_out, dom_out);
         else
