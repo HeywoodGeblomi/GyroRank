@@ -37,14 +37,15 @@
 #endif
 
 // Official Orson Peters pdqsort (preferred) with clean fallback
+// Variadic so commas inside comparator lambdas do not split the macro argument list
 #if __has_include("pdqsort.h")
   #include "pdqsort.h"
-  #define GYRO_SORT(first, last, comp) ::pdqsort((first), (last), (comp))
+  #define GYRO_SORT(...) ::pdqsort(__VA_ARGS__)
 #elif __has_include(<pdqsort.h>)
   #include <pdqsort.h>
-  #define GYRO_SORT(first, last, comp) ::pdqsort((first), (last), (comp))
+  #define GYRO_SORT(...) ::pdqsort(__VA_ARGS__)
 #else
-  #define GYRO_SORT(first, last, comp) ::std::sort((first), (last), (comp))
+  #define GYRO_SORT(...) ::std::sort(__VA_ARGS__)
 #endif
 
 namespace gyro {
