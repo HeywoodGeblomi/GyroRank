@@ -1,14 +1,19 @@
 /**
  * @file gyro_rank.hpp
- * @brief GyroRank — Elite Gyroscopic Ranking Optimizer (v0.1)
+ * @brief GyroRank — Elite Gyroscopic Ranking Optimizer (v0.1 → Phase 1 rank-identity)
  *
  * Fully optimized, production-ready C++ kernel with:
  *   - Official Orson Peters pdqsort preferred for all internal sorts
- *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking
- *   - Practical low-auxiliary path (safe fallback to Fenwick)
- *   - Explicit GyroController (observe → striate → gate)
+ *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking (reference)
+ *   - Practical low-auxiliary path (safe map to Fenwick until Phase 2)
+ *   - Explicit GyroController (observe → gate; striate arrives in Phase 3)
  *   - Deterministic LCG (LCG_DIV = 2^32) matching TDPSK production
  *   - Zero-allocation spirit, OpenMP-ready, bounds-hardened
+ *   - Rank identity: every exact M==2 path produces bit-identical ranks to Fenwick
+ *
+ * Phase 1 (GYR-CTRL-001): deleted silent 1-D escape; Rank1D only for M<=1;
+ * Approx1D is opt-in via GyroOptions.allow_approx_1d; NestedOrProjection is
+ * projection onto first two columns (not nested ranking).
  *
  * Build: g++ -O3 -std=c++17 -Iinclude examples/demo.cpp -o demo
  * Optional: place pdqsort.h next to the include path for speedup
@@ -143,7 +148,7 @@ inline double sortedness_1d(const double* col, uint32_t n, uint32_t stride = 1) 
 }
 
 // ============================================================================
-// Exact 2-D ranking — Fenwick path (elite default)
+// Exact 2-D ranking — Fenwick path (elite default / rank-identity reference)
 // ============================================================================
 inline void exact_rank_2d_fenwick(const double* matrix, uint32_t n, uint32_t m,
                                   int32_t* ranks_out, int32_t* dom_out = nullptr) {
@@ -195,7 +200,7 @@ inline void exact_rank_2d_fenwick(const double* matrix, uint32_t n, uint32_t m,
 }
 
 // ============================================================================
-// Practical low-auxiliary 2-D layers path (safe fallback)
+// Practical low-auxiliary 2-D layers path (safe fallback / alias until Phase 2)
 // ============================================================================
 inline void exact_rank_2d_lowaux(const double* matrix, uint32_t n, uint32_t m,
                                  int32_t* ranks_out) {
@@ -203,7 +208,7 @@ inline void exact_rank_2d_lowaux(const double* matrix, uint32_t n, uint32_t m,
 }
 
 // ============================================================================
-// 1-D path
+// 1-D path (Rank1D for M<=1; Approx1D is the same kernel when explicitly allowed)
 // ============================================================================
 inline void rank_1d(const double* matrix, uint32_t n, uint32_t m,
                     int32_t* ranks_out) {
@@ -232,6 +237,16 @@ inline void rank_1d(const double* matrix, uint32_t n, uint32_t m,
 }
 
 // ============================================================================
+// GyroOptions (Phase 1)
+// ============================================================================
+struct GyroOptions {
+    bool exact = true;
+    bool memory_pressure = false;
+    uint64_t memory_budget_bytes = 0; // 0 = heuristic from pressure
+    bool allow_approx_1d = false;
+};
+
+// ============================================================================
 // GyroController
 // ============================================================================
 struct GyroFeatures {
@@ -244,16 +259,18 @@ struct GyroFeatures {
 };
 
 enum class Strategy : uint8_t {
-    Insertion1D,
+    Rank1D,              // only legal for M <= 1
     Fenwick2D,
-    LowAux2D,
-    NestedOrProjection
+    LowAux2D,            // still alias until Phase 2
+    NestedOrProjection,  // projection onto first two columns for M >= 3; not nested ranking
+    Approx1D             // opt-in only; inexact
 };
 
 class GyroController {
 public:
     GyroFeatures observe(const double* matrix, uint32_t n, uint32_t m,
                          bool memory_pressure = false) {
+        // Full observe retained for Phase 1 (sample S=1024 arrives in Phase 3)
         feats_.n = n;
         feats_.m = m;
         feats_.memory_pressure = memory_pressure;
@@ -280,16 +297,31 @@ public:
         return feats_;
     }
 
-    Strategy gate() const {
+    // Phase 1 gate: exact path never auto-escapes to 1-D
+    Strategy gate(const GyroOptions& opt) const {
         const auto& f = feats_;
-        if (f.m <= 1 || (f.m == 2 && f.sortedness_0 > 0.97 && f.n < 4096))
-            return Strategy::Insertion1D;
+        if (f.m <= 1)
+            return Strategy::Rank1D;
+
+        // Approx1D is opt-in and only when exact is not required
+        if (opt.allow_approx_1d && !opt.exact)
+            return Strategy::Approx1D;
+
         if (f.m == 2) {
             if (f.memory_pressure || f.density_product > (1u << 26))
                 return Strategy::LowAux2D;
             return Strategy::Fenwick2D;
         }
+        // M >= 3: projection onto first two columns (not true nested ranking)
         return Strategy::NestedOrProjection;
+    }
+
+    // Back-compat for any internal callers that still use the old signature
+    Strategy gate() const {
+        GyroOptions opt;
+        opt.exact = true;
+        opt.memory_pressure = feats_.memory_pressure;
+        return gate(opt);
     }
 
     const GyroFeatures& features() const { return feats_; }
@@ -299,22 +331,27 @@ private:
 };
 
 // ============================================================================
-// Public entry point
+// Public entry points
 // ============================================================================
-inline void execute_gyro_rank(const double* matrix_in,
-                              uint32_t n,
-                              uint32_t m,
-                              int32_t* ranks_out,
-                              int32_t* dom_out = nullptr,
-                              bool memory_pressure = false) {
+inline void execute_gyro_rank_ex(const double* matrix_in,
+                                 uint32_t n,
+                                 uint32_t m,
+                                 int32_t* ranks_out,
+                                 int32_t* dom_out,
+                                 const GyroOptions& opt) {
     if (n == 0 || m == 0) return;
 
     GyroController ctrl;
-    ctrl.observe(matrix_in, n, m, memory_pressure);
-    Strategy strat = ctrl.gate();
+    ctrl.observe(matrix_in, n, m, opt.memory_pressure);
+    Strategy strat = ctrl.gate(opt);
 
     switch (strat) {
-    case Strategy::Insertion1D:
+    case Strategy::Rank1D:
+        rank_1d(matrix_in, n, m, ranks_out);
+        if (dom_out) std::fill(dom_out, dom_out + n, 0);
+        break;
+    case Strategy::Approx1D:
+        // inexact, col-0 only; only reached when allow_approx_1d && !exact
         rank_1d(matrix_in, n, m, ranks_out);
         if (dom_out) std::fill(dom_out, dom_out + n, 0);
         break;
@@ -326,12 +363,27 @@ inline void execute_gyro_rank(const double* matrix_in,
         if (dom_out) std::fill(dom_out, dom_out + n, 0);
         break;
     case Strategy::NestedOrProjection:
+        // Projection onto first two objectives for M >= 3; not nested ranking
         if (m >= 2)
             exact_rank_2d_fenwick(matrix_in, n, m, ranks_out, dom_out);
         else
             rank_1d(matrix_in, n, m, ranks_out);
         break;
     }
+}
+
+// Old entry point: exact by default (API compatible)
+inline void execute_gyro_rank(const double* matrix_in,
+                              uint32_t n,
+                              uint32_t m,
+                              int32_t* ranks_out,
+                              int32_t* dom_out = nullptr,
+                              bool memory_pressure = false) {
+    GyroOptions opt;
+    opt.exact = true;
+    opt.memory_pressure = memory_pressure;
+    opt.allow_approx_1d = false;
+    execute_gyro_rank_ex(matrix_in, n, m, ranks_out, dom_out, opt);
 }
 
 } // namespace gyro
