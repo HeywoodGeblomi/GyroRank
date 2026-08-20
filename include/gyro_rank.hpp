@@ -4,7 +4,7 @@
  *
  * Fully optimized, production-ready C++ kernel with:
  *   - Official Orson Peters pdqsort preferred for all internal sorts
- *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking (reference)
+ *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking
  *   - Explicit GyroController (observe → gate; striate arrives in Phase 3)
  *   - Deterministic LCG (LCG_DIV = 2^32) matching TDPSK production
  *   - Zero-allocation spirit, OpenMP-ready, bounds-hardened
@@ -15,9 +15,7 @@
  *   - Approx1D is opt-in only (GyroOptions.allow_approx_1d).
  *   - NestedOrProjection is projection onto first two columns, not nested ranking.
  *
- * Phase 2: LowAux2D stub removed. No exact alternative with measured RSS win
- *   was shipped; the enum entry and gate path were deleted per initiative rule.
- *   Fenwick2D remains the sole exact M==2 kernel.
+ * Phase 2: LowAux2D stub deleted (no RSS-winning distinct exact kernel ready).
  *
  * Build: g++ -O3 -std=c++17 -Iinclude examples/demo.cpp -o demo
  * Optional: place pdqsort.h next to the include path for speedup
@@ -257,7 +255,7 @@ struct GyroFeatures {
 
 enum class Strategy : uint8_t {
     Rank1D,              // only legal for M <= 1
-    Fenwick2D,           // sole exact M==2 kernel (reference)
+    Fenwick2D,
     NestedOrProjection,  // projection onto first two columns for M >= 3; not nested ranking
     Approx1D             // opt-in only; inexact (col-0 layers)
 };
@@ -292,7 +290,7 @@ public:
         return feats_;
     }
 
-    // Exact path never auto-escapes to 1-D; LowAux2D removed in Phase 2
+    // Phase 1+: exact path never auto-escapes to 1-D; LowAux2D removed in Phase 2
     Strategy gate(const GyroOptions& opt) const {
         const auto& f = feats_;
         if (f.m <= 1)
@@ -303,7 +301,7 @@ public:
             return Strategy::Approx1D;
 
         if (f.m == 2)
-            return Strategy::Fenwick2D;   // sole exact kernel
+            return Strategy::Fenwick2D;
 
         // M >= 3: projection onto first two columns (not true nested ranking)
         return Strategy::NestedOrProjection;

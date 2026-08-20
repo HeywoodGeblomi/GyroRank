@@ -52,19 +52,18 @@ gyro::execute_gyro_rank_ex(matrix.data(), n, m,
 |---|-------------------|---------------|-------------|-------|
 | 1 | Rank1D            | O(N log N)    | O(N)        | exact |
 | 2 | Fenwick (elite)   | O(N log N)    | Θ(N)        | exact reference |
-| 2 | Low-aux (safe)    | O(N log N)    | Θ(N)        | currently alias to Fenwick; real algorithm in Phase 2 |
 | ≥3| Projection        | O(N log N)    | Θ(N)        | first two objectives only |
 
 ## Architecture (gyroscopic view)
 
 1. **Observe** – sortedness per objective, density product after compression, N/M, memory flag
 2. **Striate** – (Phase 3) rank candidate strategies by utility
-3. **Gate** – select Rank1D / Fenwick2D / LowAux2D / NestedOrProjection / Approx1D subject to exactness and budget
+3. **Gate** – select Rank1D / Fenwick2D / NestedOrProjection / Approx1D subject to exactness and budget
 4. **Attenuate** – run the chosen kernel once
 
 Exact O(N log N) 2-objective weak-dominance via FenwickMax is the reference.
 GyroController selects among exact kernels. It does not change ranks.
-LowAux2D is exact and distinct only after Phase 2; until then do not list it as a distinct path.
+LowAux2D was removed in Phase 2 (no RSS-winning distinct exact kernel was ready; stub not allowed).
 M≥3 is projection onto the first two objectives unless Phase 6 is done.
 Approx1D is opt-in and inexact.
 No claim of superiority to a hand-chosen Fenwick call on all inputs.
