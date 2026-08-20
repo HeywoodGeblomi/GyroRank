@@ -37,7 +37,7 @@
 #endif
 
 // Official Orson Peters pdqsort (preferred) with clean fallback
-// Variadic so commas inside comparator lambdas do not split the macro argument list
+// Variadic so commas inside comparator lambdas do not split the macro
 #if __has_include("pdqsort.h")
   #include "pdqsort.h"
   #define GYRO_SORT(...) ::pdqsort(__VA_ARGS__)
