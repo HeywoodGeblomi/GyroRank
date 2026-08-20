@@ -31,14 +31,14 @@ int main() {
     auto t1 = std::chrono::high_resolution_clock::now();
     double fenwick_ms = std::chrono::duration<double, std::milli>(t1 - t0).count();
 
-    // Time observe + striate (controller only)
+    // Time observe + striate + gate (controller only)
+    // Header API: striate(const GyroOptions& opt) — one argument
     GyroController ctrl;
     GyroOptions opt;
-    double U[4];
     t0 = std::chrono::high_resolution_clock::now();
     for (int rep = 0; rep < 20; ++rep) {
         ctrl.observe(mat.data(), N, M, false, 0);
-        ctrl.striate(opt, U);
+        ctrl.striate(opt);
         (void)ctrl.gate(opt);
     }
     t1 = std::chrono::high_resolution_clock::now();
