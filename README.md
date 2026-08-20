@@ -7,7 +7,8 @@ Derived from / hardened against the TDPSK Ranking Kernel lineage (pooled Fenwick
 ## Features
 
 - Exact **O(N log N)** 2-objective weak-dominance ranking via `FenwickMax` (the reference)
-- Adaptive `GyroController` that selects among exact kernels; it does not change ranks
+- Adaptive `GyroController` (observe → striate → gate) that selects among exact kernels; it does not change ranks
+- Observe is sampled (S ≤ 1024); full coordinate compression happens inside the chosen kernel once
 - All internal coordinate / order sorts prefer **official Orson Peters pdqsort** (falls back cleanly to `std::sort`)
 - Deterministic LCG identical to TDPSK production (`A=1664525`, `C=1013904223`, `DIV=2^32`)
 - Single-header, bounds-hardened, zero-allocation spirit
@@ -37,7 +38,7 @@ gyro::execute_gyro_rank(matrix.data(), n, m,
                         ranks.data(), dom.data(),
                         /*memory_pressure=*/false);
 
-// Explicit options (Phase 1+)
+// Explicit options
 gyro::GyroOptions opt;
 opt.exact = true;
 opt.allow_approx_1d = false;
@@ -51,23 +52,25 @@ gyro::execute_gyro_rank_ex(matrix.data(), n, m,
 | M | Path              | Time          | Aux space   | Notes |
 |---|-------------------|---------------|-------------|-------|
 | 1 | Rank1D            | O(N log N)    | O(N)        | exact |
-| 2 | Fenwick (elite)   | O(N log N)    | Θ(N)        | exact reference |
+| 2 | Fenwick2D         | O(N log N)    | Θ(N)        | exact reference |
 | ≥3| Projection        | O(N log N)    | Θ(N)        | first two objectives only |
 
 ## Architecture (gyroscopic view)
 
-1. **Observe** – sortedness per objective, density product after compression, N/M, memory flag
-2. **Striate** – (Phase 3) rank candidate strategies by utility
-3. **Gate** – select Rank1D / Fenwick2D / NestedOrProjection / Approx1D subject to exactness and budget
-4. **Attenuate** – run the chosen kernel once
+1. **Observe** – sampled sortedness and uniq hats (S ≤ 1024), O(min(N,S)). Full compress stays inside the kernel.
+2. **Striate** – write dumpable U[k] for live strategies (named constexpr costs).
+3. **Gate** – argmin U under exactness constraints.
+4. **Attenuate** – run the chosen kernel once.
 
 Exact O(N log N) 2-objective weak-dominance via FenwickMax is the reference.
 GyroController selects among exact kernels. It does not change ranks.
-LowAux2D was removed in Phase 2 (no RSS-winning distinct exact kernel was ready; stub not allowed).
+Still only one exact 2-D kernel (Fenwick). LowAux2D was removed in Phase 2.
 M≥3 is projection onto the first two objectives unless Phase 6 is done.
 Approx1D is opt-in and inexact.
 No claim of superiority to a hand-chosen Fenwick call on all inputs.
 No Lyapunov, no trading alpha, no χ, no second algebraic substrate.
+
+Compile with `-DGYRO_DEBUG` to dump features, U[], and chosen strategy to stderr. Release builds are silent.
 
 ## License
 
