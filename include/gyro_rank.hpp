@@ -1,19 +1,20 @@
 /**
  * @file gyro_rank.hpp
- * @brief GyroRank — Elite Gyroscopic Ranking Optimizer (v0.1 → Phase 1 rank-identity)
+ * @brief GyroRank — Elite Gyroscopic Ranking Optimizer (v0.2-dev, Phase 1)
  *
  * Fully optimized, production-ready C++ kernel with:
  *   - Official Orson Peters pdqsort preferred for all internal sorts
- *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking (reference)
- *   - Practical low-auxiliary path (safe map to Fenwick until Phase 2)
+ *   - FenwickMax O(N log N) exact 2-objective weak-dominance ranking
+ *   - Practical low-auxiliary path (safe fallback to Fenwick until Phase 2)
  *   - Explicit GyroController (observe → gate; striate arrives in Phase 3)
  *   - Deterministic LCG (LCG_DIV = 2^32) matching TDPSK production
  *   - Zero-allocation spirit, OpenMP-ready, bounds-hardened
- *   - Rank identity: every exact M==2 path produces bit-identical ranks to Fenwick
  *
- * Phase 1 (GYR-CTRL-001): deleted silent 1-D escape; Rank1D only for M<=1;
- * Approx1D is opt-in via GyroOptions.allow_approx_1d; NestedOrProjection is
- * projection onto first two columns (not nested ranking).
+ * Phase 1 (GYR-CTRL-001): rank identity for exact M==2 paths.
+ *   - Silent 1-D escape for high sortedness deleted from exact path.
+ *   - Rank1D restricted to M<=1.
+ *   - Approx1D is opt-in only (GyroOptions.allow_approx_1d).
+ *   - NestedOrProjection is projection onto first two columns, not nested ranking.
  *
  * Build: g++ -O3 -std=c++17 -Iinclude examples/demo.cpp -o demo
  * Optional: place pdqsort.h next to the include path for speedup
@@ -148,7 +149,7 @@ inline double sortedness_1d(const double* col, uint32_t n, uint32_t stride = 1) 
 }
 
 // ============================================================================
-// Exact 2-D ranking — Fenwick path (elite default / rank-identity reference)
+// Exact 2-D ranking — Fenwick path (elite default / reference)
 // ============================================================================
 inline void exact_rank_2d_fenwick(const double* matrix, uint32_t n, uint32_t m,
                                   int32_t* ranks_out, int32_t* dom_out = nullptr) {
@@ -208,7 +209,7 @@ inline void exact_rank_2d_lowaux(const double* matrix, uint32_t n, uint32_t m,
 }
 
 // ============================================================================
-// 1-D path (Rank1D for M<=1; Approx1D is the same kernel when explicitly allowed)
+// 1-D path (Rank1D for M<=1; Approx1D when explicitly allowed)
 // ============================================================================
 inline void rank_1d(const double* matrix, uint32_t n, uint32_t m,
                     int32_t* ranks_out) {
@@ -261,16 +262,15 @@ struct GyroFeatures {
 enum class Strategy : uint8_t {
     Rank1D,              // only legal for M <= 1
     Fenwick2D,
-    LowAux2D,            // still alias until Phase 2
+    LowAux2D,            // still alias to Fenwick until Phase 2
     NestedOrProjection,  // projection onto first two columns for M >= 3; not nested ranking
-    Approx1D             // opt-in only; inexact
+    Approx1D             // opt-in only; inexact (col-0 layers)
 };
 
 class GyroController {
 public:
     GyroFeatures observe(const double* matrix, uint32_t n, uint32_t m,
                          bool memory_pressure = false) {
-        // Full observe retained for Phase 1 (sample S=1024 arrives in Phase 3)
         feats_.n = n;
         feats_.m = m;
         feats_.memory_pressure = memory_pressure;
@@ -297,7 +297,7 @@ public:
         return feats_;
     }
 
-    // Phase 1 gate: exact path never auto-escapes to 1-D
+    // Phase 1: exact path never auto-escapes to 1-D
     Strategy gate(const GyroOptions& opt) const {
         const auto& f = feats_;
         if (f.m <= 1)
@@ -316,7 +316,7 @@ public:
         return Strategy::NestedOrProjection;
     }
 
-    // Back-compat for any internal callers that still use the old signature
+    // Back-compat
     Strategy gate() const {
         GyroOptions opt;
         opt.exact = true;
