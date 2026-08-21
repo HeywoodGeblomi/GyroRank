@@ -1,19 +1,19 @@
 /**
- * GYR-SIEVE-001 Track 0 Hydra record for Scan2D
+ * GYR-SIEVE-002 Ticket C Hydra record — Scan2D NOT SHIPPED
  *
- * Attempted family: active-front / layered sweep (SFS-style window).
- * Identity vs Fenwick: PASS on the full existing fixture suite (bit-identical).
- * H-DOM (N=1e5 proxy of 1e6 class, ~1% rank-1): Scan wall ≈ 37× Fenwick.
- * H-DOM win condition (≤ 0.70×) NOT met.
+ * Family attempted: blocked prefix-max (sqrt-decomposition on y-ranks).
+ * Distinct from Fenwick tree; equal-x batch; full layers; bit-identical on identity suite.
+ * Not an SFS / active-front retry (that family failed earlier at ~37× on N=1e5).
+ *
+ * H-DOM N=1e6 (~1% rank-1), best-of-3 wall:
+ *   Fenwick:  ~530 ms
+ *   Scan2D:  ~1193 ms
+ *   ratio:    ~2.25  (need ≤ 0.70)
+ *
  * H-MEM: not claimed.
+ * Outcome (GYR-SIEVE-002 §4): delete Scan2D. No Strategy::Scan2D. No kernel in header.
+ * Successful Ticket C (honest deletion with measured numbers at N=1e6).
  *
- * Outcome (GYR-SIEVE-001 §2.2): delete Scan2D from the public surface.
- * No Strategy::Scan2D. No U[k] entry. Kernel not shipped.
- * This is a successful Track 0 (honest deletion after Hydra loss).
- *
- * Decision: Track 0 = Scan2D NOT SHIPPED (Hydra fail). v0.2 Fenwick-only remains.
+ * This file is a decision record only; main() returns 0. No 2.25× kernel on the default path.
  */
-int main() {
-    // No kernel to measure. Exit 0 documents the closed decision.
-    return 0;
-}
+int main() { return 0; }
