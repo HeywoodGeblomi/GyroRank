@@ -11,8 +11,8 @@
 - Sort remaining points by (x↑, y↑, index↑), peel the front via a min-y envelope, assign the current layer, remove the front, repeat.
 - Complexity: O(n · L) where L is the number of layers.
 - Extra space: O(n) for the index vector of remaining points (unpermute contract).
-- **Not** Blunck & Vahrenhold, Algorithmica 2010 (that paper is true in-place O(n log n) with O(1) extra words).
-- **Not** SFS / active-front, not sqrt-decomposition.
+- This is **not** an in-place O(n log n) layers algorithm with O(1) extra words.
+- Not SFS / active-front, not sqrt-decomposition.
 
 The ticket explicitly marked pure Kung peeling as off / unlikely versus Fenwick. This kernel is kept only long enough for an honest Hydra measurement and expected deletion.
 
@@ -50,11 +50,11 @@ Identical coordinates do not dominate each other → same layer (matches Fenwick
 | Commit | Contents |
 |--------|----------|
 | 1 | Citation scaffolding + empty stub + identity harness |
-| 2 (revised) | Real successive-layers peeler under its true name; BV claim removed; header restored |
+| 2 (revised) | Real successive-layers peeler under its true name; false paper claim removed; header restored |
 
 ## Non-goals (still frozen)
 
 - χ, Prym, GeblomiSort stay out of `gyro_rank.hpp`
 - No Strategy / gate / striate wire
 - Track 2 / Track 3 require an explicit GO after Track 1 closes
-- No false citation of Algorithmica 2010 for this code
+- No false paper citations for this code
