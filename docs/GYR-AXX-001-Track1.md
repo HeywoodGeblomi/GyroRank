@@ -1,7 +1,7 @@
 # GYR-AXX-001 Track 1 — Blunck & Vahrenhold Layers of Maxima
 
 **Branch:** `gyr-axx-track1` (exclusive)  
-**Status:** Commit 1 — citation + empty stub + identity harness only
+**Status:** Commit 2 — real layers kernel (identity green, no Fenwick call)
 
 ## Family (named, legal)
 
@@ -11,49 +11,53 @@ Algorithmica 57, 1–21 (2010)
 DOI: [10.1007/s00453-008-9193-z](https://doi.org/10.1007/s00453-008-9193-z)
 
 - 2-D layers of maxima
-- O(n log n) time
-- O(1) extra words (true in-place)
-- Distinct from SFS / active-front and from sqrt-decomposition (both previously failed Hydra and deleted)
+- O(n log n) time (paper); current Commit-2 extraction is O(n · L) for identity clarity
+- O(1) extra words in the pure paper algorithm; we use an index permutation (unpermute)
+- Distinct from SFS / active-front and from sqrt-decomposition
 
-## Sense mapping (critical)
+## Sense mapping
 
-The paper defines maxima with the “larger in all coordinates” convention (higher-is-better).  
-GyroRank / Fenwick uses **lower-is-better** weak dominance for ranks.
+Paper: maximality = “larger in all coordinates” (higher-is-better).  
+GyroRank / Fenwick: **lower-is-better** weak dominance.
 
-**Contract:** flip both axes (negate or reverse-order map) so that the paper’s maxima become our minima. After the flip the layer ranks must be bit-identical to `exact_rank_2d_fenwick`.
+Commit-2 implementation works directly in the lower-is-better convention (no explicit negate), which is equivalent after the documented flip. Ranks are defined by successive extraction of the non-dominated front under:
 
-## Input / output contract (critical)
+```
+q dominates p  iff  q.x ≤ p.x ∧ q.y ≤ p.y ∧ (q.x < p.x ∨ q.y < p.y)
+```
 
-- GyroRank identity requires ranks written in the **caller’s original point order**.
-- The pure Blunck–Vahrenhold algorithm permutes its array.
-- Therefore we must either:
-  1. Rank in-place then unpermute back to original order, or
-  2. Write ranks without destroying the caller’s buffer (temporary O(n) is allowed only if H-MEM still remains plausible).
+Identical coordinates do not dominate each other → same layer (matches Fenwick equal-batch).
 
-Commit 1 does not yet choose; the choice must be stated in the first implementation commit.
+## Input / output contract — **unpermute** (locked in Commit 2)
+
+- Caller’s matrix is **never modified**.
+- Only an index vector (`remaining`) is permuted / filtered.
+- Ranks are written directly into `ranks_out[original_index]`.
+- This preserves GyroRank identity (ranks in caller order) while avoiding a full point-array copy.
+- Extra space: O(n) indices (acceptable for identity; H-MEM evaluation is Commit 3+).
 
 ## Equal-x + stable ties
 
-Fenwick processes equal-x groups together (query all, then update all) and breaks remaining ties by stable original index.  
-Any layers implementation must reproduce the identical contract or identity will fail.
+- Points with equal objectives receive the same layer (neither dominates).
+- Strict inequality on at least one objective is required for domination.
+- Matches Fenwick’s equal-x batch behaviour (query-all then update-all).
 
-## Hydra target
+## Hydra target (Commit 3+, not this commit)
 
-- **H-MEM** is the only plausible class (O(1) extra space is the selling point).
-- Do **not** expect a win on H-DOM.
-- Win condition remains wall-clock ≤ 0.70× Fenwick at N=10⁶, best-of-3, g++ -O2.
-- No win → delete the kernel and the Strategy entry in the same PR. Deletion with measured numbers is a clean Track 1 exit (not A++).
+- **H-MEM** is the only plausible class.
+- Win = wall ≤ 0.70× Fenwick at N=10⁶, best-of-3, g++ -O2.
+- No win → delete kernel + any Strategy entry in the same PR.
 
-## Commit 1 contents
+## Commit history
 
-- This document
-- Empty / forwarding stub `exact_rank_2d_layers` (currently calls Fenwick so identity stays green)
-- Identity harness that forces the new path against `exact_rank_2d_fenwick`
-- **No** Strategy enum change
-- **No** gate / striate wiring
+| Commit | Contents |
+|--------|----------|
+| 1 | Citation + empty stub (forwarded to Fenwick) + identity harness |
+| 2 | Real layers kernel (this); unpermute contract locked; no Strategy |
 
 ## Non-goals (still frozen)
 
 - χ, Prym, GeblomiSort stay out of `gyro_rank.hpp`
 - No Kung peeling
-- Track 2 / Track 3 require an explicit GO after Track 1 closes
+- No Strategy / gate / striate wire
+- Track 2 / Track 3 require explicit GO after Track 1 closes
