@@ -9,9 +9,6 @@
  *   - Deterministic LCG matching TDPSK production
  *   - Zero-allocation spirit, OpenMP-ready, bounds-hardened
  *
- * GYR-AXX-001 Track 1 Option 1: successive front extraction (Kung-style peeling).
- * Not an in-place O(n log n) layers algorithm. Not the 2010 paper.
- *
  * Build: g++ -O3 -std=c++17 -Iinclude examples/demo.cpp -o demo
  * Optional: place pdqsort.h next to the include path for speedup
  */
@@ -176,86 +173,6 @@ inline void exact_rank_2d_fenwick(const double* matrix, uint32_t n, uint32_t m,
             fenwick_cnt.add(y_rank[idx], 1);
         }
         i = j;
-    }
-}
-
-// ============================================================================
-// Exact 2-D ranking — successive front extraction (Kung-style peeling)
-// Repeatedly extract the current non-dominated front under lower-is-better.
-// Contract: unpermute. Caller's matrix is never modified. Only an index
-// vector is sorted/filtered. Ranks are written by original index.
-// Equal-x batching + stable index ties via sort key (x, y, idx).
-// Complexity: O(n · L) where L = number of layers.
-// This is NOT an in-place O(n log n) / O(1) extra algorithm.
-// No call to exact_rank_2d_fenwick on this path.
-// ============================================================================
-inline void exact_rank_2d_layers(const double* matrix, uint32_t n, uint32_t m,
-                                 int32_t* ranks_out, int32_t* dom_out = nullptr) {
-    if (n == 0) return;
-    std::fill(ranks_out, ranks_out + n, 1);
-    if (dom_out) std::fill(dom_out, dom_out + n, 0);
-    if (m < 2) return;
-
-    std::vector<uint32_t> remaining(n);
-    for (uint32_t i = 0; i < n; ++i) remaining[i] = i;
-
-    std::vector<char> is_front(n, 0);
-    int32_t layer = 1;
-
-    while (!remaining.empty()) {
-        GYRO_SORT(remaining.begin(), remaining.end(),
-                  [&](uint32_t a, uint32_t b) {
-                      double ax = matrix[a * m + 0], bx = matrix[b * m + 0];
-                      if (ax != bx) return ax < bx;
-                      double ay = matrix[a * m + 1], by = matrix[b * m + 1];
-                      if (ay != by) return ay < by;
-                      return a < b;
-                  });
-
-        std::fill(is_front.begin(), is_front.end(), 0);
-        double min_y_so_far = std::numeric_limits<double>::infinity();
-        uint32_t i = 0;
-        const uint32_t rsz = static_cast<uint32_t>(remaining.size());
-
-        while (i < rsz) {
-            uint32_t j = i;
-            const double x0 = matrix[remaining[i] * m + 0];
-            while (j < rsz && matrix[remaining[j] * m + 0] == x0) ++j;
-
-            double group_min_y = std::numeric_limits<double>::infinity();
-            for (uint32_t k = i; k < j; ++k) {
-                double y = matrix[remaining[k] * m + 1];
-                if (y < group_min_y) group_min_y = y;
-            }
-
-            if (group_min_y < min_y_so_far) {
-                for (uint32_t k = i; k < j; ++k) {
-                    double y = matrix[remaining[k] * m + 1];
-                    if (y == group_min_y)
-                        is_front[remaining[k]] = 1;
-                }
-            }
-
-            if (group_min_y < min_y_so_far)
-                min_y_so_far = group_min_y;
-
-            i = j;
-        }
-
-        std::vector<uint32_t> next_remaining;
-        next_remaining.reserve(remaining.size());
-        bool any = false;
-        for (uint32_t idx : remaining) {
-            if (is_front[idx]) {
-                ranks_out[idx] = layer;
-                any = true;
-            } else {
-                next_remaining.push_back(idx);
-            }
-        }
-        if (!any) break;
-        remaining.swap(next_remaining);
-        ++layer;
     }
 }
 
