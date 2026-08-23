@@ -1,0 +1,37 @@
+COMMERCIAL LICENSE
+==================
+
+Copyright (c) 2026 Heywood Geblomi. All rights reserved.
+
+This Commercial License is a proprietary grant issued only in writing by
+the copyright holder. It is not granted by possession of the source code
+or by any public repository.
+
+GRANT (when issued in writing)
+------------------------------
+Subject to payment of the applicable fee and the terms of a signed
+commercial agreement, the copyright holder grants the licensee a
+perpetual, non-exclusive, non-transferable (except as expressly
+permitted in the signed agreement) license to:
+
+  - use, modify, and embed the Software in proprietary products and
+    services;
+  - distribute the Software (in source or object form) as part of a
+    closed-source product without the AGPLv3 source-disclosure
+    obligations;
+  - offer the Software as a service (SaaS) without the network copyleft
+    obligations of AGPLv3.
+
+The commercial grant does not include a warranty or indemnity unless
+expressly stated in the signed agreement.
+
+DEFAULT STATE
+-------------
+Until a commercial grant is issued in writing, all use of the Software
+is governed solely by the GNU Affero General Public License v3.0
+(see LICENSE-AGPL).
+
+CONTACT
+-------
+To request a commercial grant, contact the copyright holder via the
+channel listed in COMMERCIAL.md.
