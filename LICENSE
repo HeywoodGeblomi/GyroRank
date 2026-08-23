@@ -1,1 +1,18 @@
-PLACEHOLDER_WILL_FAIL
+DUAL LICENSE
+============
+
+This software is dual-licensed:
+
+  1. Non-commercial / research / evaluation / non-production use
+     → GNU Affero General Public License v3.0 (AGPLv3)
+       Full text: see LICENSE-AGPL
+
+  2. Commercial / production / embedding / SaaS / redistribution as product
+     → Requires a paid proprietary Commercial License from the copyright holder.
+       See LICENSE-COMMERCIAL and COMMERCIAL.md.
+       Contact the copyright holder to obtain a commercial grant.
+
+Copyright (c) 2026 Heywood Geblomi. All rights reserved.
+
+The full AGPLv3 text is in LICENSE-AGPL.
+Until a commercial grant is issued in writing, all use is governed by AGPLv3.
