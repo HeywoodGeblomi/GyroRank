@@ -1,0 +1,37 @@
+This file is the community / non-commercial license path of the dual-license model.
+See LICENSE for the dual statement and LICENSE-COMMERCIAL for the proprietary path.
+
+The Software is licensed under the GNU Affero General Public License v3.0 (AGPLv3).
+
+SPDX-License-Identifier: AGPL-3.0-only
+
+Full official text:
+  https://www.gnu.org/licenses/agpl-3.0.txt
+  https://www.gnu.org/licenses/agpl-3.0.html
+
+A complete copy of the AGPLv3 text is also maintained in this repository
+for offline compliance. If the full text body is not present below,
+obtain it from the official URL above and retain it with the distribution.
+
+----------------------------------------------------------------------
+How to apply AGPLv3 to your work (from FSF)
+
+  <one line to give the program's name and a brief idea of what it does.>
+  Copyright (C) <year>  <name of author>
+
+  This program is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU Affero General Public License for more details.
+
+  You should have received a copy of the GNU Affero General Public License
+  along with this program.  If not, see <https://www.gnu.org/licenses/>.
+
+----------------------------------------------------------------------
+Copyright (c) 2026 Heywood Geblomi
+Dual licensed: AGPLv3 (non-commercial) or Commercial License (see LICENSE)
