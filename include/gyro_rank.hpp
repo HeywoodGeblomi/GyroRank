@@ -1,3 +1,6 @@
+// Copyright (c) 2026 Heywood Geblomi
+// Dual licensed: AGPLv3 (non-commercial) or Commercial License (see LICENSE)
+
 /**
  * @file gyro_rank.hpp
  * @brief GyroRank — Elite Gyroscopic Ranking Optimizer (v0.2-dev)
