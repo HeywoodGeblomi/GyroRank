@@ -1,18 +1,11 @@
 /**
- * Phase 0 identity harness for GyroRank (GYR-CTRL-001)
+ * Identity harness for GyroRank.
  *
- * Builds Fenwick / Rank1D reference and compares against the gated
- * execute_gyro_rank path. Bit-identical ranks required for exact paths.
- *
- * Expected on current main (v0.1): FAIL only on ADVERSARIAL fixtures
- * (M==2, sortedness_0 > 0.97, N < 4096, y not monotone) because the
- * controller still auto-escapes to rank_1d. That failure is the Phase 1 ticket.
+ * execute_gyro_rank must match rank_1d (M=1) and exact_rank_2d_fenwick (M>=2).
+ * After the controller kill there is no expected-fail class.
  *
  * Build:
  *   g++ -O2 -std=c++17 -Iinclude tests/identity.cpp -o identity_test
- *   # optional: place pdqsort.h so __has_include succeeds
- *
- * Exit: non-zero if any identity mismatch (expected today for adversarial).
  */
 #include "gyro_rank.hpp"
 #include <iostream>
@@ -44,7 +37,6 @@ static void report(const std::string& name, bool ok, const std::string& detail =
     }
 }
 
-// ---- Deterministic fixture generators (header LCG) ----
 static void fill_random(std::vector<double>& mat, uint32_t n, uint32_t m, uint32_t& seed) {
     mat.resize(n * m);
     for (uint32_t i = 0; i < n * m; ++i)
@@ -58,7 +50,7 @@ static void fill_all_equal(std::vector<double>& mat, uint32_t n, uint32_t m, dou
 static void fill_strict_inc_x(std::vector<double>& mat, uint32_t n, uint32_t m, uint32_t& seed) {
     mat.resize(n * m);
     for (uint32_t i = 0; i < n; ++i) {
-        mat[i * m + 0] = static_cast<double>(i);           // strictly increasing x
+        mat[i * m + 0] = static_cast<double>(i);
         for (uint32_t j = 1; j < m; ++j)
             mat[i * m + j] = lcg_uniform(seed);
     }
@@ -77,18 +69,16 @@ static void fill_few_unique_y(std::vector<double>& mat, uint32_t n, uint32_t m, 
     mat.resize(n * m);
     for (uint32_t i = 0; i < n; ++i) {
         mat[i * m + 0] = lcg_uniform(seed);
-        mat[i * m + 1] = static_cast<double>(lcg_next(seed) % 7); // 7 distinct y
+        mat[i * m + 1] = static_cast<double>(lcg_next(seed) % 7);
         for (uint32_t j = 2; j < m; ++j)
             mat[i * m + j] = lcg_uniform(seed);
     }
 }
 
-// Core M==2 check: gated path vs pure Fenwick reference
-static void check_m2(const std::string& name, const std::vector<double>& mat, uint32_t n,
-                     bool memory_pressure = false) {
+static void check_m2(const std::string& name, const std::vector<double>& mat, uint32_t n) {
     std::vector<int32_t> ranks_gated(n), ranks_ref(n), dom(n);
     exact_rank_2d_fenwick(mat.data(), n, 2, ranks_ref.data(), nullptr);
-    execute_gyro_rank(mat.data(), n, 2, ranks_gated.data(), dom.data(), memory_pressure);
+    execute_gyro_rank(mat.data(), n, 2, ranks_gated.data(), dom.data());
 
     bool ok = ranks_equal(ranks_gated, ranks_ref);
     std::string detail;
@@ -103,18 +93,17 @@ static void check_m2(const std::string& name, const std::vector<double>& mat, ui
 static void check_m1(const std::string& name, const std::vector<double>& mat, uint32_t n) {
     std::vector<int32_t> ranks_gated(n), ranks_ref(n);
     rank_1d(mat.data(), n, 1, ranks_ref.data());
-    execute_gyro_rank(mat.data(), n, 1, ranks_gated.data(), nullptr, false);
+    execute_gyro_rank(mat.data(), n, 1, ranks_gated.data(), nullptr);
     report(name, ranks_equal(ranks_gated, ranks_ref));
 }
 
 int main() {
-    std::cout << "GyroRank Phase 0 identity harness (GYR-CTRL-001)\n";
-    std::cout << "================================================\n";
+    std::cout << "GyroRank identity harness\n";
+    std::cout << "=========================\n";
 
     const uint32_t Ns[] = {64, 1000, 4095, 4096, 10000};
     uint32_t seed = 42;
 
-    // ---- M=1 fixtures ----
     for (uint32_t n : Ns) {
         std::vector<double> mat;
         fill_random(mat, n, 1, seed);
@@ -130,17 +119,15 @@ int main() {
         check_m1("M1-reversed-N" + std::to_string(n), mat, n);
     }
 
-    // ---- M=2 fixtures (should pass on current main except adversarial) ----
     for (uint32_t n : Ns) {
         std::vector<double> mat;
         fill_random(mat, n, 2, seed);
         check_m2("M2-random-N" + std::to_string(n), mat, n);
-        check_m2("M2-random-N" + std::to_string(n) + "-mempressure", mat, n, true);
 
         fill_all_equal(mat, n, 2);
         check_m2("M2-all-equal-N" + std::to_string(n), mat, n);
 
-        fill_strict_inc_x(mat, n, 2, seed);  // high sortedness but N may be >=4096
+        fill_strict_inc_x(mat, n, 2, seed);
         check_m2("M2-sorted-x-rand-y-N" + std::to_string(n), mat, n);
 
         fill_reversed_x(mat, n, 2, seed);
@@ -150,25 +137,19 @@ int main() {
         check_m2("M2-few-unique-y-N" + std::to_string(n), mat, n);
     }
 
-    // ---- ADVERSARIAL set: N<4096 + sortedness_0 == 1.0 + y random ----
-    // Current controller takes Insertion1D → ranks differ from Fenwick.
-    // This is the expected Phase 0 failure / Phase 1 ticket.
     {
         const uint32_t adv_ns[] = {64, 1000, 2048, 4095};
         for (uint32_t n : adv_ns) {
             std::vector<double> mat;
-            fill_strict_inc_x(mat, n, 2, seed);  // x = 0..n-1 → sortedness_0 = 1.0
-            check_m2("ADVERSARIAL-sortedness>0.97-N" + std::to_string(n), mat, n);
-            check_m2("ADVERSARIAL-sortedness>0.97-N" + std::to_string(n) + "-mempressure",
-                     mat, n, true);
+            fill_strict_inc_x(mat, n, 2, seed);
+            check_m2("M2-sortedness-1-N" + std::to_string(n), mat, n);
         }
     }
 
-    std::cout << "================================================\n";
+    std::cout << "=========================\n";
     std::cout << "Tests: " << g_tests << "   Failures: " << g_failures << "\n";
     if (g_failures > 0) {
-        std::cout << "Phase 0 exit criterion met: harness fails on adversarial fixtures.\n";
-        std::cout << "This is expected on current main and is the Phase 1 ticket.\n";
+        std::cout << "Identity failed.\n";
         return 1;
     }
     std::cout << "All identity checks passed.\n";
